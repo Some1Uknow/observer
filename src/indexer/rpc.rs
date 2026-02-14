@@ -43,8 +43,15 @@ pub async fn print_slot_tx_count(cfg: &Config, slot: u64) -> anyhow::Result<bool
 
         match rpc.get_block_with_config(slot, block_config).await {
             Ok(block) => {
-                let tx_count = block.transactions.as_ref().map_or(0, |txs| txs.len());
-                println!("slot={slot} tx_count={tx_count}");
+                let txs = block.transactions.as_ref().map_or(&[][..], |v| v.as_slice());
+                let tx_count = txs.len();
+
+                let err_count = txs
+                    .iter()
+                    .filter(|tx| tx.meta.as_ref().is_some_and(|m| m.err.is_some()))
+                    .count();
+
+                println!("slot={slot} tx_count={tx_count} err_count={err_count}");
                 return Ok(true);
             }
             Err(err) => {
