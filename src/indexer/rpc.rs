@@ -28,14 +28,13 @@ pub async fn print_current_slot(cfg: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn print_slot_tx_count(cfg: &Config, slot: u64) -> anyhow::Result<bool> {
+pub async fn print_slot_tx_count(cfg: &Config, slot: u64) -> anyhow::Result<Option<(i32, i32)>> {
     use tokio::time::Duration;
 
     let commitment = commitment_from_str(cfg.commitment.as_str());
     let rpc = RpcClient::new_with_commitment(cfg.solana_http_url.clone(), commitment);
-    
-    for attempt in 1..=5 {
 
+    for attempt in 1..=5 {
         let block_config = RpcBlockConfig {
             max_supported_transaction_version: Some(0),
             ..RpcBlockConfig::default()
@@ -43,16 +42,19 @@ pub async fn print_slot_tx_count(cfg: &Config, slot: u64) -> anyhow::Result<bool
 
         match rpc.get_block_with_config(slot, block_config).await {
             Ok(block) => {
-                let txs = block.transactions.as_ref().map_or(&[][..], |v| v.as_slice());
-                let tx_count = txs.len();
+                let txs = block
+                    .transactions
+                    .as_ref()
+                    .map_or(&[][..], |v| v.as_slice());
+                let tx_count = txs.len() as i32;
 
                 let err_count = txs
                     .iter()
                     .filter(|tx| tx.meta.as_ref().is_some_and(|m| m.err.is_some()))
-                    .count();
+                    .count() as i32;
 
                 println!("slot={slot} tx_count={tx_count} err_count={err_count}");
-                return Ok(true);
+                return Ok(Some((tx_count, err_count)));
             }
             Err(err) => {
                 let msg = err.to_string();
@@ -67,5 +69,5 @@ pub async fn print_slot_tx_count(cfg: &Config, slot: u64) -> anyhow::Result<bool
     }
 
     println!("slot={slot} still unavailable after retries; keep cursor unchanged");
-    Ok(false)
+    Ok(None)
 }

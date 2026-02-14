@@ -56,3 +56,21 @@ pub async fn set_last_indexed_slot(
         .await?;
     Ok(())
 }
+
+pub async fn upsert_block_memory(
+    client: &Client,
+    slot: i64,
+    tx_count: i32,
+    err_count: i32,
+) -> Result<(), tokio_postgres::Error> {
+    client.execute(
+        r#"
+        INSERT INTO blocks (slot, tx_count, err_count)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (slot) DO UPDATE
+        SET tx_count = EXCLUDED.tx_count,
+        err_count = EXCLUDED.err_count
+        "#, &[&slot, &tx_count, &err_count],).await?;
+
+        Ok(())
+}
