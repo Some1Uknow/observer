@@ -4,6 +4,12 @@ use solana_client::rpc_config::RpcBlockConfig;
 use solana_sdk::commitment_config::CommitmentConfig;
 use tokio::time::sleep;
 
+#[derive(Debug, Clone)]
+pub struct TxSummary {
+    pub signature: String,
+    pub is_error: bool,
+}
+
 fn commitment_from_str(value: &str) -> CommitmentConfig {
     match value {
         "processed" => CommitmentConfig::processed(),
@@ -28,7 +34,10 @@ pub async fn print_current_slot(cfg: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn print_slot_tx_count(cfg: &Config, slot: u64) -> anyhow::Result<Option<(i32, i32)>> {
+pub async fn print_slot_tx_count(
+    cfg: &Config,
+    slot: u64,
+) -> anyhow::Result<Option<(i32, i32, Vec<TxSummary>)>> {
     use tokio::time::Duration;
 
     let commitment = commitment_from_str(cfg.commitment.as_str());
@@ -53,8 +62,10 @@ pub async fn print_slot_tx_count(cfg: &Config, slot: u64) -> anyhow::Result<Opti
                     .filter(|tx| tx.meta.as_ref().is_some_and(|m| m.err.is_some()))
                     .count() as i32;
 
+                let tx_summaries: Vec<TxSummary> = Vec::new();
+
                 println!("slot={slot} tx_count={tx_count} err_count={err_count}");
-                return Ok(Some((tx_count, err_count)));
+                return Ok(Some((tx_count, err_count, tx_summaries)));
             }
             Err(err) => {
                 let msg = err.to_string();

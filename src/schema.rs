@@ -74,3 +74,20 @@ pub async fn upsert_block_memory(
 
         Ok(())
 }
+
+pub async fn upsert_transaction_min(
+    client: &Client,
+    signature: &str,
+    slot: i64,
+    is_error: bool,
+) -> Result<(), tokio_postgres::Error> {
+    client.execute(
+        r#"
+        INSERT INTO transactions (signature, slot, is_error)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (signature) DO UPDATE
+        SET slot = EXTENDED.slot,
+        is_error = EXCLUDED.is_error
+        "#, &[&signature, &slot, &is_error],).await?;
+        Ok(())
+}

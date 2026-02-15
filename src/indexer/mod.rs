@@ -25,9 +25,17 @@ pub async fn run_slot_indexer(cfg: &Config, db: &Client) -> anyhow::Result<()> {
     let end_slot = std::cmp::min(cursor + max_slots_per_run, head);
 
     for slot in (cursor + 1)..=end_slot {
-        if let Some((tx_count, err_count)) = rpc::print_slot_tx_count(cfg, slot as u64).await? {
+        if let Some((tx_count, err_count, tx_summaries)) =
+            rpc::print_slot_tx_count(cfg, slot as u64).await?
+        {
             schema::upsert_block_memory(db, slot, tx_count, err_count).await?;
-            println!("Indexed #{slot}");
+            if let Some(first_tx) = tx_summaries.first() {
+                schema::upsert_transaction_min(db, &first_tx.signature, slot, first_tx.is_error)
+                    .await?;
+                println!("Indexed #{slot} : {}", first_tx.signature);
+            } else {
+                println!("Indexed #{slot} (no tx summaries yet)");
+            }
         } else {
             println!("Slot #{slot} unavailable/skipped");
         }
