@@ -2,11 +2,21 @@ pub mod rpc;
 pub mod ws;
 
 use crate::{config::Config, schema};
+use std::collections::HashSet;
 use tokio::time::{sleep, Duration};
 use tokio_postgres::Client;
 
 pub async fn run_slot_indexer(cfg: &Config, db: &Client) -> anyhow::Result<()> {
     println!("Starting continuous indexer loop...");
+    let target_program_ids: HashSet<String> = cfg.target_program_ids.iter().cloned().collect();
+    if target_program_ids.is_empty() {
+        println!("Risk monitor mode: tracking all programs");
+    } else {
+        println!(
+            "Risk monitor mode: tracking {} target program(s)",
+            target_program_ids.len()
+        );
+    }
 
     loop {
         rpc::print_current_slot(cfg).await?;
@@ -44,6 +54,12 @@ pub async fn run_slot_indexer(cfg: &Config, db: &Client) -> anyhow::Result<()> {
                         tx.compute_units,
                     )
                     .await?;
+                    for program_id in &tx.program_ids {
+                        if target_program_ids.is_empty() || target_program_ids.contains(program_id)
+                        {
+                            schema::upsert_tx_program(db, &tx.signature, slot, program_id).await?;
+                        }
+                    }
                 }
                 println!("Indexed #{slot} : {} tx rows", tx_summaries.len());
             } else {

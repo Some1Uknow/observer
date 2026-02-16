@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 CREATE INDEX IF NOT EXISTS transactions_slot_idx ON transactions (slot);
+
+CREATE TABLE IF NOT EXISTS tx_programs (
+  signature  TEXT NOT NULL REFERENCES transactions(signature) ON DELETE CASCADE,
+  program_id TEXT NOT NULL,
+  slot       BIGINT NOT NULL,
+  PRIMARY KEY (signature, program_id)
+);
+
+CREATE INDEX IF NOT EXISTS tx_programs_program_slot_idx ON tx_programs (program_id, slot);
 "#,
         )
         .await
@@ -94,4 +103,24 @@ pub async fn upsert_transaction_min(
         compute_units = EXCLUDED.compute_units
         "#, &[&signature, &slot, &is_error, &fee_lamports, &compute_units]).await?;
         Ok(())
+}
+
+pub async fn upsert_tx_program(
+    client: &Client,
+    signature: &str,
+    slot: i64,
+    program_id: &str,
+) -> Result<(), tokio_postgres::Error> {
+    client
+        .execute(
+            r#"
+        INSERT INTO tx_programs (signature, slot, program_id)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (signature, program_id) DO UPDATE
+        SET slot = EXCLUDED.slot
+        "#,
+            &[&signature, &slot, &program_id],
+        )
+        .await?;
+    Ok(())
 }

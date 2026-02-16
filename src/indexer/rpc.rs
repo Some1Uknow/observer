@@ -2,7 +2,11 @@ use crate::config::Config;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcBlockConfig;
 use solana_sdk::commitment_config::CommitmentConfig;
-use solana_transaction_status::{EncodedTransaction, EncodedTransactionWithStatusMeta};
+use solana_transaction_status::{
+    EncodedTransaction, EncodedTransactionWithStatusMeta, UiInstruction, UiMessage,
+    UiParsedInstruction,
+};
+use std::collections::BTreeSet;
 use tokio::time::sleep;
 
 #[derive(Debug, Clone)]
@@ -11,6 +15,7 @@ pub struct TxSummary {
     pub is_error: bool,
     pub fee_lamports: Option<i64>,
     pub compute_units: Option<i64>,
+    pub program_ids: Vec<String>,
 }
 
 fn commitment_from_str(value: &str) -> CommitmentConfig {
@@ -27,6 +32,43 @@ fn extract_signature(tx: &EncodedTransactionWithStatusMeta) -> Option<String> {
         EncodedTransaction::Accounts(accounts) => accounts.signatures.first().cloned(),
         _ => None,
     }
+}
+
+fn extract_program_ids(tx: &EncodedTransactionWithStatusMeta) -> Vec<String> {
+    let mut program_ids = BTreeSet::new();
+    if let EncodedTransaction::Json(ui_tx) = &tx.transaction {
+        match &ui_tx.message {
+            UiMessage::Raw(raw) => {
+                for instruction in &raw.instructions {
+                    if let Some(program_id) =
+                        raw.account_keys.get(instruction.program_id_index as usize)
+                    {
+                        program_ids.insert(program_id.clone());
+                    }
+                }
+            }
+            UiMessage::Parsed(parsed) => {
+                for instruction in &parsed.instructions {
+                    match instruction {
+                        UiInstruction::Compiled(compiled) => {
+                            if let Some(account) =
+                                parsed.account_keys.get(compiled.program_id_index as usize)
+                            {
+                                program_ids.insert(account.pubkey.clone());
+                            }
+                        }
+                        UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(decoded)) => {
+                            program_ids.insert(decoded.program_id.clone());
+                        }
+                        UiInstruction::Parsed(UiParsedInstruction::Parsed(parsed_ix)) => {
+                            program_ids.insert(parsed_ix.program_id.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    program_ids.into_iter().collect()
 }
 
 pub async fn get_current_slot(cfg: &Config) -> anyhow::Result<u64> {
@@ -92,6 +134,7 @@ pub async fn print_slot_tx_count(
                         is_error,
                         fee_lamports,
                         compute_units,
+                        program_ids: extract_program_ids(tx),
                     });
                 }
 

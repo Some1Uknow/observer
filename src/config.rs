@@ -7,6 +7,7 @@ pub struct Config {
     pub solana_http_url: String,
     pub solana_ws_url: String,
     pub commitment: String,
+    pub target_program_ids: Vec<String>,
 }
 
 impl Config {
@@ -19,12 +20,20 @@ impl Config {
         let solana_ws_url =
             env::var("SOLANA_WS_URL").unwrap_or_else(|_| "wss://api.devnet.solana.com/".into());
         let commitment = env::var("COMMITMENT").unwrap_or_else(|_| "finalized".into());
+        let target_program_ids = env::var("TARGET_PROGRAM_IDS")
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .collect();
 
         Ok(Self {
             database_url,
             solana_http_url,
             solana_ws_url,
             commitment,
+            target_program_ids,
         })
     }
 }
