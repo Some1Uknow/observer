@@ -1,6 +1,6 @@
 use tokio_postgres::Client;
 
-pub async fn ensure_schema(client: &Client) -> Result<(), tokio_postgres::Error> {
+pub async fn init_schema(client: &Client) -> Result<(), tokio_postgres::Error> {
     client
         .batch_execute(
             r#"
@@ -46,14 +46,17 @@ CREATE INDEX IF NOT EXISTS tx_programs_program_slot_idx ON tx_programs (program_
         .await
 }
 
-pub async fn get_last_indexed_slot(client: &Client) -> Result<i64, tokio_postgres::Error> {
+pub async fn load_last_indexed_slot(client: &Client) -> Result<i64, tokio_postgres::Error> {
     let row = client
-        .query_one("SELECT last_indexed_slot FROM observer_cursor WHERE id = 1", &[])
+        .query_one(
+            "SELECT last_indexed_slot FROM observer_cursor WHERE id = 1",
+            &[],
+        )
         .await?;
     Ok(row.get::<_, i64>(0))
 }
 
-pub async fn set_last_indexed_slot(
+pub async fn save_last_indexed_slot(
     client: &Client,
     last_indexed_slot: i64,
 ) -> Result<(), tokio_postgres::Error> {
@@ -66,34 +69,39 @@ pub async fn set_last_indexed_slot(
     Ok(())
 }
 
-pub async fn upsert_block_memory(
+pub async fn upsert_block_summary(
     client: &Client,
     slot: i64,
     tx_count: i32,
     err_count: i32,
 ) -> Result<(), tokio_postgres::Error> {
-    client.execute(
-        r#"
+    client
+        .execute(
+            r#"
         INSERT INTO blocks (slot, tx_count, err_count)
         VALUES ($1, $2, $3)
         ON CONFLICT (slot) DO UPDATE
         SET tx_count = EXCLUDED.tx_count,
         err_count = EXCLUDED.err_count
-        "#, &[&slot, &tx_count, &err_count],).await?;
+        "#,
+            &[&slot, &tx_count, &err_count],
+        )
+        .await?;
 
-        Ok(())
+    Ok(())
 }
 
-pub async fn upsert_transaction_min(
+pub async fn upsert_transaction_summary(
     client: &Client,
     signature: &str,
     slot: i64,
     is_error: bool,
     fee_lamports: Option<i64>,
-    compute_units: Option<i64>
+    compute_units: Option<i64>,
 ) -> Result<(), tokio_postgres::Error> {
-    client.execute(
-        r#"
+    client
+        .execute(
+            r#"
         INSERT INTO transactions (signature, slot, is_error, fee_lamports, compute_units)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (signature) DO UPDATE
@@ -101,8 +109,11 @@ pub async fn upsert_transaction_min(
         is_error = EXCLUDED.is_error,
         fee_lamports = EXCLUDED.fee_lamports,
         compute_units = EXCLUDED.compute_units
-        "#, &[&signature, &slot, &is_error, &fee_lamports, &compute_units]).await?;
-        Ok(())
+        "#,
+            &[&signature, &slot, &is_error, &fee_lamports, &compute_units],
+        )
+        .await?;
+    Ok(())
 }
 
 pub async fn upsert_tx_program(

@@ -2,7 +2,7 @@ use anyhow::Context;
 use futures_util::StreamExt;
 use solana_client::nonblocking::pubsub_client::PubsubClient;
 
-pub async fn read_one_slot_event(ws_url: &str) -> anyhow::Result<Option<i64>> {
+pub async fn collect_slot_burst(ws_url: &str) -> anyhow::Result<Option<i64>> {
     let pubsub = PubsubClient::new(ws_url)
         .await
         .context("pubsub client creation failed")?;

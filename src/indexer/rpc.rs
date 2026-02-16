@@ -18,7 +18,14 @@ pub struct TxSummary {
     pub program_ids: Vec<String>,
 }
 
-fn commitment_from_str(value: &str) -> CommitmentConfig {
+#[derive(Debug, Clone)]
+pub struct SlotMetrics {
+    pub tx_count: i32,
+    pub err_count: i32,
+    pub tx_summaries: Vec<TxSummary>,
+}
+
+fn get_commitment(value: &str) -> CommitmentConfig {
     match value {
         "processed" => CommitmentConfig::processed(),
         "confirmed" => CommitmentConfig::confirmed(),
@@ -71,14 +78,14 @@ fn extract_program_ids(tx: &EncodedTransactionWithStatusMeta) -> Vec<String> {
     program_ids.into_iter().collect()
 }
 
-pub async fn get_current_slot(cfg: &Config) -> anyhow::Result<u64> {
-    let commitment = commitment_from_str(cfg.commitment.as_str());
+pub async fn fetch_current_slot(cfg: &Config) -> anyhow::Result<u64> {
+    let commitment = get_commitment(cfg.commitment.as_str());
     let rpc = RpcClient::new_with_commitment(cfg.solana_http_url.clone(), commitment);
     Ok(rpc.get_slot().await?)
 }
 
-pub async fn print_current_slot(cfg: &Config) -> anyhow::Result<()> {
-    let commitment = commitment_from_str(cfg.commitment.as_str());
+pub async fn log_current_head_slot(cfg: &Config) -> anyhow::Result<()> {
+    let commitment = get_commitment(cfg.commitment.as_str());
 
     let rpc = RpcClient::new_with_commitment(cfg.solana_http_url.clone(), commitment);
     let current_slot = rpc.get_slot().await?;
@@ -87,13 +94,10 @@ pub async fn print_current_slot(cfg: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn print_slot_tx_count(
-    cfg: &Config,
-    slot: u64,
-) -> anyhow::Result<Option<(i32, i32, Vec<TxSummary>)>> {
+pub async fn fetch_slot_metrics(cfg: &Config, slot: u64) -> anyhow::Result<Option<SlotMetrics>> {
     use tokio::time::Duration;
 
-    let commitment = commitment_from_str(cfg.commitment.as_str());
+    let commitment = get_commitment(cfg.commitment.as_str());
     let rpc = RpcClient::new_with_commitment(cfg.solana_http_url.clone(), commitment);
 
     for attempt in 1..=5 {
@@ -139,7 +143,11 @@ pub async fn print_slot_tx_count(
                 }
 
                 println!("slot={slot} tx_count={tx_count} err_count={err_count}");
-                return Ok(Some((tx_count, err_count, tx_summaries)));
+                return Ok(Some(SlotMetrics {
+                    tx_count,
+                    err_count,
+                    tx_summaries,
+                }));
             }
             Err(err) => {
                 let msg = err.to_string();

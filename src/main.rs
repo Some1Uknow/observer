@@ -8,10 +8,6 @@ use tokio_postgres::NoTls;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
-
-    // Step 2 (you will build): slot stream (WS) + getBlock (HTTP) + persist.
-    //
-    // For now: validate config, connect DB, init schema, and stop.
     let cfg = config::Config::from_env().context("load config")?;
 
     let (client, connection) = tokio_postgres::connect(&cfg.database_url, NoTls)
@@ -24,11 +20,11 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    schema::ensure_schema(&client)
+    schema::init_schema(&client)
         .await
         .context("ensure schema")?;
 
-    let cursor = schema::get_last_indexed_slot(&client).await?;
+    let cursor = schema::load_last_indexed_slot(&client).await?;
     println!("observer ready (last_indexed_slot={cursor})");
     println!(
         "solana config loaded (commitment={}, target_programs={})",
