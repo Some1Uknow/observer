@@ -30,7 +30,7 @@ pub async fn run_slot_indexer(cfg: &Config, db: &Client) -> anyhow::Result<()> {
         {
             schema::upsert_block_memory(db, slot, tx_count, err_count).await?;
             for tx in &tx_summaries {
-                schema::upsert_transaction_min(db, &tx.signature, slot, tx.is_error).await?;
+                schema::upsert_transaction_min(db, &tx.signature, slot, tx.is_error, tx.fee_lamports).await?;
             }
             println!("Indexed #{slot} : {} tx rows", tx_summaries.len());
         } else {

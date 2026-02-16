@@ -9,6 +9,7 @@ use tokio::time::sleep;
 pub struct TxSummary {
     pub signature: String,
     pub is_error: bool,
+    pub fee_lamports: Option<i64>,
 }
 
 fn commitment_from_str(value: &str) -> CommitmentConfig {
@@ -78,9 +79,11 @@ pub async fn print_slot_tx_count(
                         .unwrap_or_else(|| format!("missing-signature-{slot}-{idx}"));
                     let is_error = tx.meta.as_ref().is_some_and(|m| m.err.is_some());
 
+                    let fee_lamports = tx.meta.as_ref().and_then(|m| i64::try_from(m.fee).ok());
                     tx_summaries.push(TxSummary {
                         signature,
                         is_error,
+                        fee_lamports,
                     });
                 }
 
