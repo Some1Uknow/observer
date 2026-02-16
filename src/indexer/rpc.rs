@@ -2,6 +2,7 @@ use crate::config::Config;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcBlockConfig;
 use solana_sdk::commitment_config::CommitmentConfig;
+use solana_transaction_status::{EncodedTransaction, EncodedTransactionWithStatusMeta};
 use tokio::time::sleep;
 
 #[derive(Debug, Clone)]
@@ -15,6 +16,14 @@ fn commitment_from_str(value: &str) -> CommitmentConfig {
         "processed" => CommitmentConfig::processed(),
         "confirmed" => CommitmentConfig::confirmed(),
         _ => CommitmentConfig::finalized(),
+    }
+}
+
+fn extract_signature(tx: &EncodedTransactionWithStatusMeta) -> Option<String> {
+    match &tx.transaction {
+        EncodedTransaction::Json(ui_tx) => ui_tx.signatures.first().cloned(),
+        EncodedTransaction::Accounts(accounts) => accounts.signatures.first().cloned(),
+        _ => None,
     }
 }
 
@@ -62,7 +71,18 @@ pub async fn print_slot_tx_count(
                     .filter(|tx| tx.meta.as_ref().is_some_and(|m| m.err.is_some()))
                     .count() as i32;
 
-                let tx_summaries: Vec<TxSummary> = Vec::new();
+                let mut tx_summaries: Vec<TxSummary> = Vec::new();
+
+                for (idx, tx) in txs.iter().enumerate() {
+                    let signature = extract_signature(tx)
+                        .unwrap_or_else(|| format!("missing-signature-{slot}-{idx}"));
+                    let is_error = tx.meta.as_ref().is_some_and(|m| m.err.is_some());
+
+                    tx_summaries.push(TxSummary {
+                        signature,
+                        is_error,
+                    });
+                }
 
                 println!("slot={slot} tx_count={tx_count} err_count={err_count}");
                 return Ok(Some((tx_count, err_count, tx_summaries)));

@@ -29,13 +29,10 @@ pub async fn run_slot_indexer(cfg: &Config, db: &Client) -> anyhow::Result<()> {
             rpc::print_slot_tx_count(cfg, slot as u64).await?
         {
             schema::upsert_block_memory(db, slot, tx_count, err_count).await?;
-            if let Some(first_tx) = tx_summaries.first() {
-                schema::upsert_transaction_min(db, &first_tx.signature, slot, first_tx.is_error)
-                    .await?;
-                println!("Indexed #{slot} : {}", first_tx.signature);
-            } else {
-                println!("Indexed #{slot} (no tx summaries yet)");
+            for tx in &tx_summaries {
+                schema::upsert_transaction_min(db, &tx.signature, slot, tx.is_error).await?;
             }
+            println!("Indexed #{slot} : {} tx rows", tx_summaries.len());
         } else {
             println!("Slot #{slot} unavailable/skipped");
         }
