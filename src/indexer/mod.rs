@@ -2,44 +2,58 @@ pub mod rpc;
 pub mod ws;
 
 use crate::{config::Config, schema};
+use tokio::time::{sleep, Duration};
 use tokio_postgres::Client;
 
 pub async fn run_slot_indexer(cfg: &Config, db: &Client) -> anyhow::Result<()> {
-    rpc::print_current_slot(cfg).await?;
+    println!("Starting continuous indexer loop...");
 
-    match ws::read_one_slot_event(&cfg.solana_ws_url).await {
-        Ok(_) => {}
-        Err(err) => println!("WS unavailable, continuing with RPC polling path: {err}"),
-    }
+    loop {
+        rpc::print_current_slot(cfg).await?;
 
-    let cursor = schema::get_last_indexed_slot(db).await?;
-    let head = rpc::get_current_slot(cfg).await? as i64;
-    println!("cursor={cursor} head={head}");
-
-    if cursor >= head {
-        println!("No finalized slots pending");
-        return Ok(());
-    }
-
-    let max_slots_per_run = 20_i64;
-    let end_slot = std::cmp::min(cursor + max_slots_per_run, head);
-
-    for slot in (cursor + 1)..=end_slot {
-        if let Some((tx_count, err_count, tx_summaries)) =
-            rpc::print_slot_tx_count(cfg, slot as u64).await?
-        {
-            schema::upsert_block_memory(db, slot, tx_count, err_count).await?;
-            for tx in &tx_summaries {
-                schema::upsert_transaction_min(db, &tx.signature, slot, tx.is_error, tx.fee_lamports, tx.compute_units).await?;
-            }
-            println!("Indexed #{slot} : {} tx rows", tx_summaries.len());
-        } else {
-            println!("Slot #{slot} unavailable/skipped");
+        match ws::read_one_slot_event(&cfg.solana_ws_url).await {
+            Ok(_) => {}
+            Err(err) => println!("WS unavailable, continuing with RPC polling path: {err}"),
         }
 
-        schema::set_last_indexed_slot(db, slot).await?;
-        println!("Cursor Updated to #{slot}");
-    }
+        let cursor = schema::get_last_indexed_slot(db).await?;
+        let head = rpc::get_current_slot(cfg).await? as i64;
+        println!("cursor={cursor} head={head}");
 
-    Ok(())
+        if cursor >= head {
+            println!("No finalized slots pending");
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
+        let max_slots_per_run = 20_i64;
+        let end_slot = std::cmp::min(cursor + max_slots_per_run, head);
+
+        for slot in (cursor + 1)..=end_slot {
+            if let Some((tx_count, err_count, tx_summaries)) =
+                rpc::print_slot_tx_count(cfg, slot as u64).await?
+            {
+                schema::upsert_block_memory(db, slot, tx_count, err_count).await?;
+                for tx in &tx_summaries {
+                    schema::upsert_transaction_min(
+                        db,
+                        &tx.signature,
+                        slot,
+                        tx.is_error,
+                        tx.fee_lamports,
+                        tx.compute_units,
+                    )
+                    .await?;
+                }
+                println!("Indexed #{slot} : {} tx rows", tx_summaries.len());
+            } else {
+                println!("Slot #{slot} unavailable/skipped");
+            }
+
+            schema::set_last_indexed_slot(db, slot).await?;
+            println!("Cursor Updated to #{slot}");
+        }
+
+        sleep(Duration::from_millis(200)).await;
+    }
 }

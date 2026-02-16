@@ -1,6 +1,6 @@
 # Observer
 
-Real-time Solana network observability pipeline built with Rust and Postgres.
+Solana network observability indexer (Rust + Postgres).
 
 ## Problem
 
@@ -15,14 +15,14 @@ Raw RPC calls and ad-hoc scripts do not provide reliable state continuity, repla
 
 ## Solution
 
-Observer is a production-style slot indexer:
+Observer implements the standard indexer split:
 
-- Uses WebSocket (`slotSubscribe`) for low-latency slot signals
-- Uses RPC (`getBlock`) for canonical block + transaction data
-- Stores normalized records in Postgres for analytics and alerting
-- Persists an indexing cursor (`last_indexed_slot`) for crash-safe resume
+- WebSocket (`slotSubscribe`) for low-latency wake-up signals
+- RPC (`getBlock`) for canonical finalized block data
+- Postgres upserts for idempotent persistence
+- Cursor (`last_indexed_slot`) for crash-safe resume
 
-This design separates real-time event detection from authoritative data retrieval, which is the standard architecture used by production indexers.
+This makes indexing deterministic and replay-safe.
 
 ## Architecture
 
@@ -32,28 +32,29 @@ This design separates real-time event detection from authoritative data retrieva
 4. Storage layer upserts blocks/transactions and advances cursor.
 5. SQL queries/views power dashboards and alert thresholds.
 
+## What It Solves
+
+
+- **Crash-safe continuity:** indexer resumes from DB cursor after restarts.
+- **Historical traceability:** stores slot summaries (`tx_count`, `err_count`) and tx rows (`signature`, `is_error`, `fee_lamports`, `compute_units`).
+- **Reliability visibility:** supports failed-tx rate and expensive-tx analysis via SQL.
+- **Reprocessing safety:** uses upserts to avoid duplicate-row corruption.
+
 ## Current Status
 
 Implemented:
 
-- Environment + dependency setup
-- Dockerized Postgres
-- Schema bootstrap (`blocks`, `transactions`, `observer_cursor`)
-- RPC connectivity with configurable commitment
-- WebSocket slot subscription (event stream)
-- Cursor write path (`last_indexed_slot` updates)
-
-In progress:
-
-- Per-slot `getBlock` ingestion and DB inserts
-- Startup backfill from cursor to latest slot
-- Idempotent retry/recovery behavior
+- Dockerized Postgres + schema bootstrap
+- Slot ingestion (WS trigger + RPC fetch)
+- Cursor-based backfill window
+- Block and transaction persistence
+- Fee/CU capture per transaction
+- Continuous worker loop (runs until stopped)
 
 Planned:
 
-- Aggregated metrics tables/views (TPS, failure rate, fee/CU trends)
-- Alert hooks for congestion and error spikes
-- Program-level attribution and hot-path analysis
+- Program-level attribution and error taxonomy
+- KPI views + alerting hooks
 
 ## Why This Is Useful
 
@@ -71,6 +72,20 @@ cd /Users/raghavsharma/Documents/observer
 cp .env.example .env
 docker compose up -d
 RUN_INDEXER=1 cargo run
+```
+
+## Useful Queries
+
+Recent slot integrity check:
+
+```bash
+docker exec -i observer-postgres psql -U observer -d observer -c "select b.slot, b.tx_count, coalesce(t.tx_rows, 0) as tx_rows from blocks b left join (select slot, count(*) as tx_rows from transactions group by slot) t on t.slot = b.slot order by b.slot desc limit 20;"
+```
+
+Recent tx cost/error sample:
+
+```bash
+docker exec -i observer-postgres psql -U observer -d observer -c "select signature, slot, is_error, fee_lamports, compute_units from transactions order by slot desc limit 20;"
 ```
 
 ## Environment Variables
