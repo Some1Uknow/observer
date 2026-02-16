@@ -29,10 +29,11 @@ async fn main() -> anyhow::Result<()> {
         .context("ensure schema")?;
 
     let cursor = schema::get_last_indexed_slot(&client).await?;
-    println!("observer ready (last_indexed_slot={})", cursor);
+    println!("observer ready (last_indexed_slot={cursor})");
     println!(
-        "solana: http={} ws={} commitment={}",
-        cfg.solana_http_url, cfg.solana_ws_url, cfg.commitment
+        "solana config loaded (commitment={}, target_programs={})",
+        cfg.commitment,
+        cfg.target_program_ids.len()
     );
 
     if std::env::var("RUN_INDEXER").as_deref() == Ok("1") {

@@ -82,7 +82,7 @@ pub async fn print_current_slot(cfg: &Config) -> anyhow::Result<()> {
 
     let rpc = RpcClient::new_with_commitment(cfg.solana_http_url.clone(), commitment);
     let current_slot = rpc.get_slot().await?;
-    println!("Current Slot : {}", current_slot);
+    println!("head_slot={current_slot}");
 
     Ok(())
 }
@@ -144,9 +144,13 @@ pub async fn print_slot_tx_count(
             Err(err) => {
                 let msg = err.to_string();
                 if msg.contains("Block not available for slot") {
-                    println!("slot={slot} not available yet (attempt {attempt}/10)");
+                    println!("slot={slot} not available yet (attempt {attempt}/5)");
                     sleep(Duration::from_millis(500)).await;
                     continue;
+                }
+                if msg.contains("was skipped") || msg.contains("missing in long-term storage") {
+                    println!("slot={slot} skipped/unavailable in RPC history; continuing");
+                    return Ok(None);
                 }
                 return Err(err.into());
             }
