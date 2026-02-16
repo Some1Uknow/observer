@@ -10,6 +10,7 @@ pub struct TxSummary {
     pub signature: String,
     pub is_error: bool,
     pub fee_lamports: Option<i64>,
+    pub compute_units: Option<i64>,
 }
 
 fn commitment_from_str(value: &str) -> CommitmentConfig {
@@ -80,10 +81,17 @@ pub async fn print_slot_tx_count(
                     let is_error = tx.meta.as_ref().is_some_and(|m| m.err.is_some());
 
                     let fee_lamports = tx.meta.as_ref().and_then(|m| i64::try_from(m.fee).ok());
+
+                    let compute_units = tx.meta.as_ref().and_then(|m| {
+                        let maybe_cu: Option<u64> = m.compute_units_consumed.clone().into();
+                        maybe_cu.and_then(|cu| i64::try_from(cu).ok())
+                    });
+
                     tx_summaries.push(TxSummary {
                         signature,
                         is_error,
                         fee_lamports,
+                        compute_units,
                     });
                 }
 

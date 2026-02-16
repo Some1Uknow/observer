@@ -81,15 +81,17 @@ pub async fn upsert_transaction_min(
     slot: i64,
     is_error: bool,
     fee_lamports: Option<i64>,
+    compute_units: Option<i64>
 ) -> Result<(), tokio_postgres::Error> {
     client.execute(
         r#"
-        INSERT INTO transactions (signature, slot, is_error, fee_lamports)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO transactions (signature, slot, is_error, fee_lamports, compute_units)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (signature) DO UPDATE
         SET slot = EXCLUDED.slot,
         is_error = EXCLUDED.is_error,
-        fee_lamports = EXCLUDED.fee_lamports
-        "#, &[&signature, &slot, &is_error, &fee_lamports]).await?;
+        fee_lamports = EXCLUDED.fee_lamports,
+        compute_units = EXCLUDED.compute_units
+        "#, &[&signature, &slot, &is_error, &fee_lamports, &compute_units]).await?;
         Ok(())
 }
