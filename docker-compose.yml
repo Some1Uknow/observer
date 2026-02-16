@@ -16,5 +16,14 @@ services:
       timeout: 2s
       retries: 20
 
+  adminer:
+    image: adminer:4
+    container_name: observer-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   observer_pg_data:

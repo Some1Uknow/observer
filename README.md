@@ -78,6 +78,28 @@ docker compose up -d
 RUN_INDEXER=1 cargo run
 ```
 
+## Database UI (Adminer)
+
+Start services:
+
+```bash
+docker compose up -d
+```
+
+Open:
+
+```text
+http://localhost:8080
+```
+
+Login values:
+
+- System: `PostgreSQL`
+- Server: `postgres`
+- Username: `observer`
+- Password: `observer`
+- Database: `observer`
+
 ## Use As A DeFi Risk Monitor
 
 1. Configure target protocol program IDs in `.env`:
